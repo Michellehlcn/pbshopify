@@ -359,10 +359,10 @@ def init():
         
 if __name__ == "__main__":
     # Every day at 6am or 06:00 time init() is called.
-    init()
-    # schedule.every().day.at("06:00").do(init)
-    # while True:
-    #     schedule.run_pending()
-    #     time.sleep(1)
+    # init()
+    schedule.every().day.at("06:00").do(init)
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
  
     
