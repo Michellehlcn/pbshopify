@@ -159,8 +159,16 @@ def getProductsByTitle(title):
         "X-Shopify-Access-Token": token,
         "Accept": "aplication/json"
     }
-
+    response =''
     response = requests.request("GET", url, headers=headers, params=querystring)
+    print(response.status_code)
+    if response.status_code !=200 & response.status_code !=201: 
+        print('exceeded limit call per second for shopify')
+        print(response.text)
+        time.sleep(5)
+        response = requests.request("GET", url, headers=headers, params=querystring)
+        time.sleep(2)
+
     products = json.loads(response.text)
     return products
 
@@ -226,9 +234,11 @@ def process(products, e_Products):
                 print(f'Adding PromoBrands {products[i]["product_id"]} -  {products[i]["product_code"]}')
                 # Create a new product
                 pr = createNewProducts(products[i])
+                time.sleep(1)
                 print(f'Adding product {pr["product"]["id"]}')
                 # Add image
                 addImage(pr["product"]['id'], products[i]["product_image"])
+                time.sleep(1)
                 
                 # if product item only have one variant, modify exiting variant
                 # if product item has more than one variant, modify the first variant and create new variants for the rest of the list
@@ -238,56 +248,81 @@ def process(products, e_Products):
                     if j == 0:
                         
                         vr = addStockVariant(pr['product']['id'], pr["product"]['variants'][0]['id'], products[i]["variants"][j], products[i])
+                        time.sleep(1)
                         addInventoryLevel(vr["product"]["variants"][0]["inventory_item_id"],products[i]["variants"][j]["stock"])
+                        time.sleep(1)
                     if j > 0:
                         print(f'[new variant] {products[i]["variants"][j].get("itemNumber")}' )
                         vr = addNewStockVariant(pr["product"]["id"], products[i]["variants"][j], products[i])
+                        time.sleep(1)
                         print(vr)
                         addInventoryLevel(vr["variant"]["inventory_item_id"],products[i]["variants"][j]["stock"])
+                        time.sleep(1)
         
         # Update product
         # Case: have more than one variant 
             elif checkUpdateVariants(products[i], e_Products) is True :      
                 p = getProductsByTitle(products[i]["name"])
-                for v in p["products"][0]["variants"]:
+                time.sleep(2)
+                #By pass error products
+                try:
+                    a =p["products"][0]
                     
-                    # variant already exits, add adjustment
-                    for v_ in products[i]["variants"]:
-                        if v["sku"] == v_["itemNumber"]:
-                            if v_["stock"] is None:
-                                v_["stock"] = '0'
-                            adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
-                            if adjust != 0:
-                                print(f'** 2nd updating stock level product {products[i]["product_code"]} **')
-                                print(f"[Adustment] stock level {adjust}")
-                                adjustInventoryLevel(v["inventory_item_id"], str(adjust))
-                    # variant not exit, create new variant
-                    if len(p["products"][0]["variants"]) < len(products[i]["variants"]):
-                        print("[Detect] new variant-- Adding...")
-                        vrExiting = [vrl["sku"] for vrl in p["products"][0]["variants"]]
-                        vrList = [v for v in products[i]["variants"] if v["itemNumber"] not in vrExiting]
-                        print(vrList)
-                        for subVr in vrList:
-                            vr = addNewStockVariant(p["products"][0]["id"], subVr, products[i])
-                            print(vr)
-                            addInventoryLevel(vr["variant"]["inventory_item_id"],subVr["stock"])
+                    for v in p["products"][0]["variants"]:
+
+                        # variant already exits, add adjustment
+                        for v_ in products[i]["variants"]:
+                            if v["sku"] == v_["itemNumber"]:
+                                if v_["stock"] is None:
+                                    v_["stock"] = '0'
+                                adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
+                                if adjust != 0:
+                                    print(f'** 2nd updating stock level product {products[i]["product_code"]} **')
+                                    print(f"[Adustment] stock level {adjust}")
+                                    adjustInventoryLevel(v["inventory_item_id"], str(adjust))
+                                    time.sleep(3)
+                        # variant not exit, create new variant
+                        if len(p["products"][0]["variants"]) < len(products[i]["variants"]):
+                            print("[Detect] new variant-- Adding...")
+                            vrExiting = [vrl["sku"] for vrl in p["products"][0]["variants"]]
+                            vrList = [v for v in products[i]["variants"] if v["itemNumber"] not in vrExiting]
+                            print(vrList)
+                            for subVr in vrList:
+                                vr = addNewStockVariant(p["products"][0]["id"], subVr, products[i])
+                                time.sleep(1)
+                                print(vr)
+                                addInventoryLevel(vr["variant"]["inventory_item_id"],subVr["stock"])
+                                time.sleep(1)
+                except:
+                    print(p)
+                    print(products[i]["name"])
+                    pass
         # case: 1 variant
         elif products[i]["product_code"] in e_Products:
-            if checkUpdateVariants(products[i], e_Products) is True :           
+            if checkUpdateVariants(products[i], e_Products) is True :
                 p = getProductsByTitle(products[i]["name"])
-                for v in p["products"][0]["variants"]:
-                    # variant already exits, add adjustment
-                    for v_ in products[i]["variants"]:
-                        
-                        if v["sku"] == v_["itemNumber"]:
-                            if v_["stock"] is None:
-                                v_["stock"] = '0'
-                            adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
-                            if adjust != 0:
-                                print(f'** 1rd updating stock level product {products[i]["product_code"]} **')
-                                print(f"[Adustment] stock level {adjust}")
-                                adjustInventoryLevel(v["inventory_item_id"], str(adjust))
-        
+                time.sleep(2)
+                #By pass error products
+                try:
+                    a =p["products"][0]
+
+                    for v in p['products'][0]['variants']:
+                        # variant already exits, add adjustment
+                        for v_ in products[i]["variants"]:
+
+                            if v["sku"] == v_["itemNumber"]:
+                                if v_["stock"] is None:
+                                    v_["stock"] = '0'
+                                adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
+                                if adjust != 0:
+                                    print(f'** 1rd updating stock level product {products[i]["product_code"]} **')
+                                    print(f"[Adustment] stock level {adjust}")
+                                    adjustInventoryLevel(v["inventory_item_id"], str(adjust))
+                                    time.sleep(1)
+                except:
+                    print(p)
+                    print(products[i]["name"])
+                    pass
 
 def init():
     start = dt.now()
@@ -324,9 +359,10 @@ def init():
         
 if __name__ == "__main__":
     # Every day at 6am or 06:00 time init() is called.
-    schedule.every().day.at("06:00").do(init)
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+    init()
+    # schedule.every().day.at("06:00").do(init)
+    # while True:
+    #     schedule.run_pending()
+    #     time.sleep(1)
  
     
