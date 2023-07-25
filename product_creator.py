@@ -7,6 +7,7 @@ import re
 from datetime import datetime as dt
 import schedule
 import time
+import logging
 
 import os
 
@@ -59,7 +60,7 @@ def addStockVariant(productId, variantId, variant, product):
     }
 
     response = requests.request("PUT", url, json=payload, headers=headers)
-    print(f'>> response Add stock variant {response.status_code}')
+    logging.info(f'>> response Add stock variant {response.status_code}')
     variant = json.loads(response.text)
     return variant
 def addNewStockVariant(productId, variant, product): 
@@ -79,7 +80,7 @@ def addNewStockVariant(productId, variant, product):
     }
 
     response = requests.request("POST", url, json=payload, headers=headers)
-    print(f'>>  response Add new stock variant {response.status_code}')
+    logging.info(f'>>  response Add new stock variant {response.status_code}')
     if response.status_code == 422:
         # if error because of duplicate title/option1, combine name variant and variant itemNumber
         payload = {
@@ -95,7 +96,7 @@ def addNewStockVariant(productId, variant, product):
     return variant
 
 def addInventoryLevel(inventoryId, avail):
-    print(f'{str(inventoryId)} - stock level: {avail}')
+    logging.info(f'{str(inventoryId)} - stock level: {avail}')
     if avail is None:
         avail = '0'
     url = f'https://{store}/admin/api/2023-07/inventory_levels/set.json'
@@ -161,10 +162,10 @@ def getProductsByTitle(title):
     }
     response =''
     response = requests.request("GET", url, headers=headers, params=querystring)
-    print(response.status_code)
+    logging.info(response.status_code)
     if response.status_code !=200 & response.status_code !=201: 
-        print('exceeded limit call per second for shopify')
-        print(response.text)
+        logging.info('exceeded limit call per second for shopify')
+        logging.info(response.text)
         time.sleep(5)
         response = requests.request("GET", url, headers=headers, params=querystring)
         time.sleep(2)
@@ -195,7 +196,7 @@ def existingProducts():
         if len(products["products"]) == 0: 
             isNotLimit = False
         else:
-            print(f"Total existing products for this batch: %s" % len(products["products"]))
+            logging.info(f"Total existing products for this batch: %s" % len(products["products"]))
             lastId = products["products"][-1]["id"]
             for p in products["products"]:
                 for v in p["variants"]:
@@ -206,7 +207,7 @@ def existingProducts():
 def checkVariantExists(product, e_product):
     check = False
     if len(product["variants"]) == 0:
-        print(f'Offshore express {product["product_code"]} {product["name"]}')
+        logging.info(f'Offshore express {product["product_code"]} {product["name"]}')
         check = True
     else:    
         for v in product["variants"]:
@@ -231,18 +232,18 @@ def process(products, e_Products):
 
         if products[i]["product_code"] not in e_Products:
             if checkVariantExists(products[i], e_Products) is False:
-                print(f'Adding PromoBrands {products[i]["product_id"]} -  {products[i]["product_code"]}')
+                logging.info(f'Adding PromoBrands {products[i]["product_id"]} -  {products[i]["product_code"]}')
                 # Create a new product
                 pr = createNewProducts(products[i])
                 time.sleep(1)
-                print(f'Adding product {pr["product"]["id"]}')
+                logging.info(f'Adding product {pr["product"]["id"]}')
                 # Add image
                 addImage(pr["product"]['id'], products[i]["product_image"])
                 time.sleep(1)
                 
                 # if product item only have one variant, modify exiting variant
                 # if product item has more than one variant, modify the first variant and create new variants for the rest of the list
-                pprint.pprint(products[i]["variants"])
+                logging.info(products[i]["variants"])
             
                 for j in range(len(products[i]["variants"])):
                     if j == 0:
@@ -252,10 +253,10 @@ def process(products, e_Products):
                         addInventoryLevel(vr["product"]["variants"][0]["inventory_item_id"],products[i]["variants"][j]["stock"])
                         time.sleep(1)
                     if j > 0:
-                        print(f'[new variant] {products[i]["variants"][j].get("itemNumber")}' )
+                        logging.info(f'[new variant] {products[i]["variants"][j].get("itemNumber")}' )
                         vr = addNewStockVariant(pr["product"]["id"], products[i]["variants"][j], products[i])
                         time.sleep(1)
-                        print(vr)
+                        logging.info(vr)
                         addInventoryLevel(vr["variant"]["inventory_item_id"],products[i]["variants"][j]["stock"])
                         time.sleep(1)
         
@@ -277,25 +278,25 @@ def process(products, e_Products):
                                     v_["stock"] = '0'
                                 adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
                                 if adjust != 0:
-                                    print(f'** 2nd updating stock level product {products[i]["product_code"]} **')
-                                    print(f"[Adustment] stock level {adjust}")
+                                    logging.info(f'** 2nd updating stock level product {products[i]["product_code"]} **')
+                                    logging.info(f"[Adustment] stock level {adjust}")
                                     adjustInventoryLevel(v["inventory_item_id"], str(adjust))
                                     time.sleep(3)
                         # variant not exit, create new variant
                         if len(p["products"][0]["variants"]) < len(products[i]["variants"]):
-                            print("[Detect] new variant-- Adding...")
+                            logging.info("[Detect] new variant-- Adding...")
                             vrExiting = [vrl["sku"] for vrl in p["products"][0]["variants"]]
                             vrList = [v for v in products[i]["variants"] if v["itemNumber"] not in vrExiting]
-                            print(vrList)
+                            logging.info(vrList)
                             for subVr in vrList:
                                 vr = addNewStockVariant(p["products"][0]["id"], subVr, products[i])
                                 time.sleep(1)
-                                print(vr)
+                                logging.info(vr)
                                 addInventoryLevel(vr["variant"]["inventory_item_id"],subVr["stock"])
                                 time.sleep(1)
                 except:
-                    print(p)
-                    print(products[i]["name"])
+                    logging.info(p)
+                    logging.info(products[i]["name"])
                     pass
         # case: 1 variant
         elif products[i]["product_code"] in e_Products:
@@ -315,20 +316,20 @@ def process(products, e_Products):
                                     v_["stock"] = '0'
                                 adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
                                 if adjust != 0:
-                                    print(f'** 1rd updating stock level product {products[i]["product_code"]} **')
-                                    print(f"[Adustment] stock level {adjust}")
+                                    logging.info(f'** 1rd updating stock level product {products[i]["product_code"]} **')
+                                    logging.info(f"[Adustment] stock level {adjust}")
                                     adjustInventoryLevel(v["inventory_item_id"], str(adjust))
                                     time.sleep(1)
                 except:
-                    print(p)
-                    print(products[i]["name"])
+                    logging.info(p)
+                    logging.info(products[i]["name"])
                     pass
 
 def init():
     start = dt.now()
     e_Products= []
     e_Products = existingProducts() # list of sku items
-    print(e_Products)
+    logging.info(e_Products)
 
     products =[]
     token_ = promo_brands.gettoken()
@@ -338,7 +339,7 @@ def init():
     products = promo_brands.getPromoBrandProducts(token_, last_product)
    
     last_product = products[-1]['product_id']
-    print(f'******** Last Product ID {last_product} **********')
+    logging.info(f'******** Last Product ID {last_product} **********')
     process(products, e_Products)
     
     # IsNotPromoBrandLimit = True
@@ -349,20 +350,29 @@ def init():
     #         IsNotPromoBrandLimit = False
     #     else:
     #         last_product = products[-1]['product_id']
-    #         print(f'******** Last Product ID {last_product} **********')
+    #         logging.info(f'******** Last Product ID {last_product} **********')
     #         process(products, e_Products)
 
     end = dt.now()
     elapsed = end - start
-    print("Total running times: %02d:%02d:%02d:%02d" % (elapsed.days, elapsed.seconds // 3600, elapsed.seconds // 60 % 60, elapsed.seconds % 60))
+    logging.info("Total running times: %02d:%02d:%02d:%02d" % (elapsed.days, elapsed.seconds // 3600, elapsed.seconds // 60 % 60, elapsed.seconds % 60))
 
         
 if __name__ == "__main__":
-    # Every day at 6am or 06:00 time init() is called.
-    # init()
-    schedule.every().day.at("06:00").do(init)
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+    try:
+        logging.basicConfig(filename='logs.log',
+                        filemode='a',
+                        format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+                        datefmt='%H:%M:%S',
+                        level=logging.INFO)
+        logging.info("STARTING")
+        # Every day at 6am or 06:00 time init() is called.
+        init()
+        # schedule.every().day.at("06:00").do(init)
+        # while True:
+        #     schedule.run_pending()
+        #     time.sleep(1)
+    except:
+        print("STOPPING")
  
     

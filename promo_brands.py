@@ -2,6 +2,7 @@ import requests
 import json
 import pprint
 import os
+import logging
 
 client_id = os.environ['CLIENT_ID']
 refresh_token = os.environ['REFRESH_TOKEN']
@@ -86,7 +87,7 @@ def getPromoBrandProducts(token, id):
             "variants": variants,
             "tags": tags
             })
-    pprint.pprint(f"Promobrands total products {len(listObj)}")
+    logging.info(f"Promobrands total products {len(listObj)}")
     return listObj
 
 def promo_brands():
@@ -97,7 +98,7 @@ def promo_brands():
     while len(res) != 0:
         res = getPromoBrandProducts(token, last_product)
         last_product = res[len(res)]["Product_ID"]
-        print(last_product)
+        logging.info(last_product)
 
         return res
     
