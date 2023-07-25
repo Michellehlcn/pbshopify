@@ -363,7 +363,7 @@ if __name__ == "__main__":
         logging.basicConfig(filename='logs.log',
                         filemode='a',
                         format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
-                        datefmt='%H:%M:%S',
+                        datefmt='%m/%d/%Y %I:%M:%S %p',
                         level=logging.INFO)
         logging.info("STARTING")
         # Every day at 6am or 06:00 time init() is called.
@@ -372,6 +372,7 @@ if __name__ == "__main__":
         # while True:
         #     schedule.run_pending()
         #     time.sleep(1)
+
     except:
         print("STOPPING")
  
