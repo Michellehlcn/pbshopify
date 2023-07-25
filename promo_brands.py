@@ -10,6 +10,7 @@ url_promobrand=os.environ['URL_PROMOBRAND']
 cookie_promobrand=os.environ['COOKIE_PROMOBRAND']
 api_promobrand=os.environ['API_PROMOBRAND']
 
+logger = logging.getLogger(__name__)
 def gettoken():
     url = url_promobrand
 
@@ -87,7 +88,7 @@ def getPromoBrandProducts(token, id):
             "variants": variants,
             "tags": tags
             })
-    logging.info(f"Promobrands total products {len(listObj)}")
+    print(f"Promobrands total products {len(listObj)}")
     return listObj
 
 def promo_brands():
@@ -98,7 +99,7 @@ def promo_brands():
     while len(res) != 0:
         res = getPromoBrandProducts(token, last_product)
         last_product = res[len(res)]["Product_ID"]
-        logging.info(last_product)
+        print(last_product)
 
         return res
     
