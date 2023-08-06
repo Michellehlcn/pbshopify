@@ -2,3 +2,7 @@ requests
 schedule
 logging
 bs4
+pandas
+html5lib
+selenium
+lxml
