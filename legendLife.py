@@ -14,10 +14,10 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException
 
-token =""
-store=""
-location=""
+
+
 def getCollectionLink(driver):
     page = 1
     dic = []
@@ -25,19 +25,20 @@ def getCollectionLink(driver):
         driver.get(f"https://www.legendlife.com.au/product_search?limit=100&p={page}")
         products = driver.find_element(By.CLASS_NAME, "products-grid")
         itm = products.find_elements(By.TAG_NAME, 'li')
-        for i in range(1,2):
+        for i in range(1,3):
             pag = {}
-            product = products.find_element(By.CSS_SELECTOR, f"li:nth-of-type({i})").find_element(By.CLASS_NAME, "product-code" ).find_element(By.TAG_NAME, 'a')
-            link = product.get_attribute("href")
-            title = product.get_attribute("title")
-            sku = product.text
-            price = products.find_element(By.CSS_SELECTOR, f"li:nth-of-type({i})").find_element(By.CLASS_NAME, "regular-price").find_element(By.CLASS_NAME, "price").text
-          
+            product = products.find_element(By.CSS_SELECTOR, f"li:nth-of-type({i})").find_element(By.CLASS_NAME, "product-info")
+            link = product.find_element(By.CLASS_NAME, "product-code" ).find_element(By.TAG_NAME, 'a').get_attribute("href")
+            title = product.find_element(By.CLASS_NAME, "product-title" ).text
+            sku = product.find_element(By.CLASS_NAME, "product-code" ).find_element(By.TAG_NAME, 'a').text
+            price = products.find_element(By.CSS_SELECTOR, f"li:nth-of-type({i})").find_element(By.CLASS_NAME, "price-box").find_element(By.CLASS_NAME, "regular-price").find_element(By.CLASS_NAME, "price").text
+            
             pag["sku"] = sku
             pag["link"] = link
             pag["title"] = title
             pag["lowest_price"] = price
             pag["tags"] = "new"
+            print(pag)
             dic.append(pag)
         page += 1
     print(dic)
@@ -45,13 +46,11 @@ def getCollectionLink(driver):
 
 
 def getData(url, driver):
-    driver.get(url)
 
     driver.find_element(By.ID,"colour-selector-dropdown").click()
     dropdown = Select(driver.find_element(By.ID,"attribute137"))
     fulldata = []
-    for i in (1,len(dropdown.options)-1):
-
+    for i in range(1,len(dropdown.options)):
         dropdown.select_by_value(dropdown.options[i].get_attribute("value"))
         time.sleep(4)
         html = driver.page_source
@@ -62,8 +61,7 @@ def getData(url, driver):
                     data = {}
                     data["color"] = dropdown.options[i].text
                     data["size"] = table.find_element(By.CSS_SELECTOR, f"tr:nth-of-type({tr})").find_element(By.CSS_SELECTOR, "td:nth-of-type(1)" ).text
-                    data["stock"] = table.find_element(By.CSS_SELECTOR,f"tr:nth-of-type({tr})").find_element(By.CSS_SELECTOR, "td:nth-of-type(2)" ).text
-                    
+                    data["stock"] = table.find_element(By.CSS_SELECTOR,f"tr:nth-of-type({tr})").find_element(By.CSS_SELECTOR, "td:nth-of-type(2)" ).text       
                     fulldata.append(data)
                 except Exception as e:
                     continue
@@ -97,14 +95,9 @@ def remove_empty_lists (lst):
     return [ e for e in lst if len(e)!=0]
 
 def createNewProducts(data, colorList, sizeList):
-    print(colorList)
-    print(sizeList)
     variant = data["variants"][0]
     colorList = [*set(colorList)]
     sizeList = [*set(remove_empty_lists(sizeList))]
-    print(colorList)
-    print(sizeList)
-    print(len(sizeList))
     url = f"https://{store}/admin/api/2023-07/products.json"
     if len(sizeList) != 0 :
         payload = {
@@ -135,7 +128,7 @@ def createNewProducts(data, colorList, sizeList):
     else:
         payload = {
         "product": {
-            "title": data["title"],
+            "title": f'{data["sku"]}.{data["title"]}',
             "body_html": data["description"],
             "vendor": "Legend Life",
             "status": "draft",
@@ -227,6 +220,24 @@ def addStockVariant(productId, variantId, variant, product):
     print(f'>> response Add stock variant {response.status_code}')
     variant = json.loads(response.text)
     return variant
+
+#Adjusts the inventory level of an inventory item at a location
+def adjustInventoryLevel(inventoryId, adjust):
+
+    url = f'https://{store}/admin/api/2023-07/inventory_levels/adjust.json'
+    payload = {
+        "location_id": location,
+        "inventory_item_id": inventoryId,
+        "available_adjustment": re.sub("[+,]","",adjust),
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": token,
+        "Accept": "aplication/json"
+    }
+
+    response = requests.request("POST", url, json=payload, headers=headers)
+
 def addNewStockVariant(productId, variant, product): 
     url = f'https://{store}/admin/api/2023-07/products/{productId}/variants.json'
     if variant.get('size') != "":
@@ -276,7 +287,180 @@ def addInventoryLevel(inventoryId, avail):
     }
 
     response = requests.request("POST", url, json=payload, headers=headers)
+def existingProducts():
 
+    url = f"https://{store}/admin/api/2023-07/products.json"
+    isNotLimit = True
+    lastId = 1 # 8444626239795
+    list = []
+    #Running through pagination    
+    count= 0
+    while isNotLimit:
+        querystring = {
+            "vendor":"Legend Life", 
+            "limit": 250,
+            "since_id": lastId
+            }
+        headers = {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": token
+        }
+
+        response = requests.request("GET", url, headers=headers, params=querystring)
+        products = json.loads(response.text)
+
+        if len(products["products"]) == 0: 
+            isNotLimit = False
+        else:
+            print(f"Total existing products for this batch: %s" % len(products["products"]))
+            count=+  len(products["products"])
+            lastId = products["products"][-1]["id"]
+            for p in products["products"]:
+                for v in p["variants"]:
+                    list.append(v["sku"])
+    print( f'Total product count for Legend Life : {str(count)} .')
+    return list
+def getProductsByTitle(title):
+    url = f"https://{store}/admin/api/2023-07/products.json"
+    querystring = {"vendor":"Promo Brands","title":title}
+    headers = {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": token,
+        "Accept": "aplication/json"
+    }
+    response =''
+    response = requests.request("GET", url, headers=headers, params=querystring)
+    print(response.status_code)
+    if response.status_code !=200 & response.status_code !=201: 
+        print('exceeded limit call per second for shopify')
+        print(response.text)
+        time.sleep(5)
+        response = requests.request("GET", url, headers=headers, params=querystring)
+        time.sleep(2)
+
+    products = json.loads(response.text)
+    return products
+
+def scrapeLegendLife():
+
+    URL="https://www.legendlife.com.au/customer/account/login/referer/aHR0cHM6Ly93d3cubGVnZW5kbGlmZS5jb20uYXUvY3VzdG9tZXIvYWNjb3VudC9pbmRleC8,/"
+    driver = webdriver.Firefox()
+    driver.get(URL)
+    # assertIn("search", driver.title)
+    wait = WebDriverWait(driver, 20)
+    username = driver.find_element(By.ID, "email")
+    password = driver.find_element(By.ID, "pass")
+    username.send_keys(e)
+    password.send_keys(p)
+    driver.find_element(By.ID,"send2").click()
+
+    items = getCollectionLink(driver)
+    for item in items:
+        driver.get(item.get("link"))
+        
+        shortDescription =""
+        productSpec =""
+        colorSpecs =""
+        colorChart =""
+        marketSheet =""
+        imagePack =""
+        warranty =""
+
+        desc = driver.find_element(By.ID, "product_tabs_summary_contents" )
+        # short description
+        try: 
+            shortDescription = f"<p>{desc.find_element(By.CLASS_NAME, 'short-description').text}</p>"
+        except NoSuchElementException:
+            print("")
+        # Product specification
+        try:
+            productSpecText = desc.find_element(By.XPATH,'//h4[contains(text(),"Product Specifications")]').find_element(By.XPATH, 'following-sibling::*[1]').get_attribute('innerHTML')
+            productSpec =f"<h4>Product Specifications</h4>{productSpecText}"
+        except NoSuchElementException:
+            print("")
+
+        # Color
+        try:
+            colorText = desc.find_element(By.XPATH,'//h4[contains(text(),"Colours")]').find_element(By.XPATH, 'following-sibling::*[1]').text
+            colorSpecs = f"<h4>Colours</h4><p>{colorText}</p>"
+        except NoSuchElementException:
+            print("")
+        # PMS Color chart
+        try:
+            desc.find_element(By.XPATH,"//h4[contains(text(),'PMS Colour Chart')]")
+            colorChartText= desc.find_element(By.XPATH,"//h4[contains(text(),'PMS Colour Chart')]").find_element(By.XPATH, "following-sibling::*[1]").text
+            link_ = desc.find_element(By.XPATH,"//h4[contains(text(),'PMS Colour Chart')]").find_element(By.XPATH, "following-sibling::*[1]").find_element(By.TAG_NAME,"a").get_attribute('href')
+            colorChart = f"<h4>PMS Colour Chart</h4><ul><li><a href='{link_}' target='_blank' >{colorChartText}</a></li></ul>"
+        except NoSuchElementException:
+            print("")
+
+        # Marketing info sheet
+        try:
+            marketSheetText= desc.find_element(By.XPATH,"//h4[contains(text(),'Marketing Info Sheet')]").find_element(By.XPATH, "following-sibling::*[1]").text
+            linkSheet = desc.find_element(By.XPATH,"//h4[contains(text(),'Marketing Info Sheet')]").find_element(By.XPATH, "following-sibling::*[1]").find_element(By.TAG_NAME,"a").get_attribute('href')
+            marketSheet = f"<h4>Marketing Info Sheet</h4><ul><li><a href='{linkSheet }' target='_blank' >{marketSheetText}</a></li></ul>"
+        except NoSuchElementException:
+            print("")
+        
+        # Image Pack
+        # try:
+        #     imagePackText= desc.find_element(By.XPATH,"//h4[contains(text(),'Image Pack')]").find_element(By.XPATH, "following-sibling::*[1]").text
+        #     linkImagePack = desc.find_element(By.XPATH,"//h4[contains(text(),'Image Pack')]").find_element(By.XPATH, "following-sibling::*[1]").find_element(By.TAG_NAME,"a").get_attribute('href')
+        #     if imagePackText !="":
+        #         imagePack = f"<h4>Image Pack</h4><ul><li><a href='{linkImagePack}' target='_blank' >{imagePackText}</a></li></ul>"
+        # except NoSuchElementException:
+        #     print("")
+
+        # Warranty
+        try:
+            w =""
+            for e in desc.find_element(By.XPATH,"//h4[contains(text(),'Warranty & Technologies')]").find_element(By.XPATH, "following-sibling::*[1]").find_elements(By.TAG_NAME,"li"):
+                warrantyText = e.text
+                linkWarranty = e.find_element(By.TAG_NAME,"a").get_attribute('href')
+                w += f"<li><a href='{linkWarranty}' target='_blank' >{warrantyText}</a></li>"
+            warranty = f"<h4>Warranty & Technologies</h4><ul>{w}</ul>"
+        except NoSuchElementException:
+            print("")
+        customize ="<h4>Customise your order - Request a Quote</h4><p>Submit a quote request to receive pricing based on your logo branding and quantity you require. Bulk discounts apply.</p>"
+        item["description"] = shortDescription +  customize + productSpec + colorSpecs + colorChart +marketSheet + warranty
+        
+        images = driver.find_element(By.CLASS_NAME, "swatchesContainer" ).find_elements(By.TAG_NAME,"a") 
+        img_cover = driver.find_element(By.CLASS_NAME, "product-image-zoom" ).find_element(By.TAG_NAME,"a").find_element(By.TAG_NAME,"img").get_attribute('src')
+        item["product_image"] = [img_cover] + [image.get_attribute('href') for image in images]
+        
+        variant = getData(item.get("link"), driver)
+        item["variants"] = variant
+    print(items)
+    return items
+
+def createNewProductLegendLife(product):
+    print(product)
+    colorList = [p.get('color') for p in product["variants"]]
+    sizeList = [p.get('size') for p in product["variants"]]
+    pr = createNewProducts(product, colorList, sizeList)
+    print(pr)
+    time.sleep(1)
+    # Add image
+    addImage(pr["product"]['id'], product["product_image"])
+    time.sleep(1)
+    
+    # if product item only have one variant, modify exiting variant
+    # if product item has more than one variant, modify the first variant and create new variants for the rest of the list
+    print(product["variants"])
+
+    for j in range(len(product["variants"])):
+        if j == 0:   
+            vr = addStockVariant(pr['product']['id'], pr["product"]['variants'][0]['id'], product["variants"][j], product)
+            time.sleep(1)
+            addInventoryLevel(vr["product"]["variants"][0]["inventory_item_id"],product["variants"][j]["stock"])
+            time.sleep(1)
+        if j > 0:
+            vr = addNewStockVariant(pr["product"]["id"], product["variants"][j], product)
+            time.sleep(1)
+            print(vr)
+            addInventoryLevel(vr["variant"]["inventory_item_id"],product["variants"][j]["stock"])
+            time.sleep(1)
+  
 
 # Enable logging
 logging.basicConfig(
@@ -285,53 +469,59 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-e=""
-p=""
-URL="https://www.legendlife.com.au/customer/account/login/referer/aHR0cHM6Ly93d3cubGVnZW5kbGlmZS5jb20uYXUvY3VzdG9tZXIvYWNjb3VudC9pbmRleC8,/"
-driver = webdriver.Firefox()
-driver.get(URL)
-# assertIn("search", driver.title)
-wait = WebDriverWait(driver, 20)
-username = driver.find_element(By.ID, "email")
-password = driver.find_element(By.ID, "pass")
-username.send_keys(e)
-password.send_keys(p)
-driver.find_element(By.ID,"send2").click()
-items = getCollectionLink(driver)
-for item in items:
-    variant = getData(item.get("link"), driver)
-    item["variants"] = variant
-    print(variant)
-    item["description"] = driver.find_element(By.CLASS_NAME, "short-description" ).text
-    print(item["description"])
-    images = driver.find_element(By.CLASS_NAME, "swatchesContainer" ).find_elements(By.TAG_NAME,"a") 
-    item["product_image"] = [image.get_attribute('href') for image in images]
-print(items)
-products = items
+#products = scrapeLegendLife()
+
+# Get existing products from LegendLife
+e_Products= []
+e_Products = existingProducts() # list of sku items
+print(e_Products)
+
+setSku = []
+for e_Product in e_Products:
+    print(e_Product)
+    print(e_Product.split(".")[0])
+    if e_Product.split(".")[0]is not None:
+        setSku.append(e_Product.split(".")[0])
+setSku = set(setSku)
+print(setSku)
 
 for i in range(len(products)):
-    colorList = [p.get('color') for p in products[i]["variants"]]
-    sizeList = [p.get('size') for p in products[i]["variants"]]
-    pr = createNewProducts(products[i], colorList, sizeList)
-    print(pr)
-    time.sleep(1)
-    # Add image
-    addImage(pr["product"]['id'], products[i]["product_image"])
-    time.sleep(1)
-    
-    # if product item only have one variant, modify exiting variant
-    # if product item has more than one variant, modify the first variant and create new variants for the rest of the list
-    print(products[i]["variants"])
 
-    for j in range(len(products[i]["variants"])):
-        if j == 0:   
-            vr = addStockVariant(pr['product']['id'], pr["product"]['variants'][0]['id'], products[i]["variants"][j], products[i])
-            time.sleep(1)
-            addInventoryLevel(vr["product"]["variants"][0]["inventory_item_id"],products[i]["variants"][j]["stock"])
-            time.sleep(1)
-        if j > 0:
-            vr = addNewStockVariant(pr["product"]["id"], products[i]["variants"][j], products[i])
-            time.sleep(1)
-            print(vr)
-            addInventoryLevel(vr["variant"]["inventory_item_id"],products[i]["variants"][j]["stock"])
-            time.sleep(1)
+    # Scanning existing products
+    # If existing product, update stock level only
+    # if not existing product, create new product
+
+    if products[i]["sku"] not in e_Products:
+        if products[i]["sku"] not in setSku:
+            # Create new product
+            print(">> ***[create new product]***")
+            createNewProductLegendLife(products[i])
+        else:
+            # Update existing product stock level 
+            print(f'updating ... {products[i]["sku"]}.{products[i]["title"]}')
+            p = getProductsByTitle(f'{products[i]["sku"]}.{products[i]["title"]}')
+            time.sleep(2)
+            #By pass error products
+            try:
+                a =p["products"][0]
+                
+                for v in p["products"][0]["variants"]: #from shopify
+
+                    # variant already exits, add adjustment
+                    for v_ in products[i]["variants"]: #from legend scraper
+                        if (v["sku"] == f'{products[i]["sku"]}.{v_["color"]}.{v_["size"]}') or (v["sku"] == f'{products[i]["sku"]}.{v_["color"]}'):
+                            if v_["stock"] is None:
+                                v_["stock"] = '0'
+                            adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
+                            if adjust != 0:
+                                print(f'** 2nd updating stock level product {products[i]["product_code"]} **')
+                                print(f"[Adustment] stock level {adjust}")
+                                print( f"[Adustment] stock level for {v['inventory_item_id']} - adjust {adjust} .")
+                                adjustInventoryLevel(v["inventory_item_id"], str(adjust))
+                                time.sleep(3)
+     
+            except:
+                print(p)
+                print(products[i]["name"])
+                pass
+
