@@ -14,32 +14,33 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 
 
 def getCollectionLink(driver):
-    page = 1
+    page = 2
     dic = []
-    while page <11:
-        driver.get(f"https://www.legendlife.com.au/product_search?limit=100&p={page}")
-        products = driver.find_element(By.CLASS_NAME, "products-grid")
-        itm = products.find_elements(By.TAG_NAME, 'li')
-        for i in range(1,3):
-            pag = {}
-            product = products.find_element(By.CSS_SELECTOR, f"li:nth-of-type({i})").find_element(By.CLASS_NAME, "product-info")
-            link = product.find_element(By.CLASS_NAME, "product-code" ).find_element(By.TAG_NAME, 'a').get_attribute("href")
-            title = product.find_element(By.CLASS_NAME, "product-title" ).text
-            sku = product.find_element(By.CLASS_NAME, "product-code" ).find_element(By.TAG_NAME, 'a').text
-            price = products.find_element(By.CSS_SELECTOR, f"li:nth-of-type({i})").find_element(By.CLASS_NAME, "price-box").find_element(By.CLASS_NAME, "regular-price").find_element(By.CLASS_NAME, "price").text
-            
-            pag["sku"] = sku
-            pag["link"] = link
-            pag["title"] = title
-            pag["lowest_price"] = price
-            pag["tags"] = "new"
-            print(pag)
-            dic.append(pag)
+    # while page <11:
+    driver.get(f"https://www.legendlife.com.au/product_search?limit=100&p={page}")
+    products = driver.find_element(By.CLASS_NAME, "products-grid")
+    itm = products.find_elements(By.TAG_NAME, 'li')
+    print(len(itm))
+    for i in range(1,len(itm)+1):
+        pag = {}
+        product = products.find_element(By.CSS_SELECTOR, f"li:nth-of-type({i})").find_element(By.CLASS_NAME, "product-info")
+        link = product.find_element(By.CLASS_NAME, "product-code" ).find_element(By.TAG_NAME, 'a').get_attribute("href")
+        title = product.find_element(By.CLASS_NAME, "product-title" ).text
+        sku = product.find_element(By.CLASS_NAME, "product-code" ).find_element(By.TAG_NAME, 'a').text
+        price = products.find_element(By.CSS_SELECTOR, f"li:nth-of-type({i})").find_element(By.CLASS_NAME, "price-box").find_element(By.CLASS_NAME, "regular-price").find_element(By.CLASS_NAME, "price").text
+        
+        pag["sku"] = sku
+        pag["link"] = link
+        pag["title"] = title
+        pag["lowest_price"] = price
+        pag["tags"] = "new"
+        print(pag)
+        dic.append(pag)
         page += 1
     print(dic)
     return dic  
@@ -51,27 +52,36 @@ def getData(url, driver):
     dropdown = Select(driver.find_element(By.ID,"attribute137"))
     fulldata = []
     for i in range(1,len(dropdown.options)):
+
         dropdown.select_by_value(dropdown.options[i].get_attribute("value"))
-        time.sleep(4)
-        html = driver.page_source
-        table = driver.find_element(By.ID, "order-summary-row-table-id")
-        if (table.find_element(By.CSS_SELECTOR, "tr:nth-of-type(1)").find_element(By.CSS_SELECTOR, "td:nth-of-type(1)" ).text =="Size"):
-            for tr in range(2,10):
-                try:
-                    data = {}
-                    data["color"] = dropdown.options[i].text
-                    data["size"] = table.find_element(By.CSS_SELECTOR, f"tr:nth-of-type({tr})").find_element(By.CSS_SELECTOR, "td:nth-of-type(1)" ).text
-                    data["stock"] = table.find_element(By.CSS_SELECTOR,f"tr:nth-of-type({tr})").find_element(By.CSS_SELECTOR, "td:nth-of-type(2)" ).text       
-                    fulldata.append(data)
-                except Exception as e:
-                    continue
-        else:
-            data = {}
-            data["color"] = dropdown.options[i].text
-            data["size"] =""
-            data["stock"] = table.find_element(By.CSS_SELECTOR, "tr:nth-of-type(2)").find_element(By.CSS_SELECTOR, "td:nth-of-type(1)" ).text
-           
-            fulldata.append(data)
+        time.sleep(5)
+       
+       
+        try:
+            element = WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.ID, "order-summary-row-table-id")))   
+            element1 = WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.CLASS_NAME, "order-summary-row-table-item-qty-class")))
+            table = driver.find_element(By.ID, "order-summary-row-table-id")
+            if (table.find_element(By.CSS_SELECTOR, "tr:nth-of-type(1)").find_element(By.CSS_SELECTOR, "td:nth-of-type(1)" ).text =="Size"):
+                for tr in range(2,10):
+                    try:
+                        data = {}
+                        data["color"] = dropdown.options[i].text
+                        data["size"] = table.find_element(By.CSS_SELECTOR, f"tr:nth-of-type({tr})").find_element(By.CSS_SELECTOR, "td:nth-of-type(1)" ).text
+                        data["stock"] = table.find_element(By.CSS_SELECTOR,f"tr:nth-of-type({tr})").find_element(By.CSS_SELECTOR, "td:nth-of-type(2)" ).text       
+                        fulldata.append(data)
+                    except Exception as e:
+                        continue
+            else:
+                data = {}
+                data["color"] = dropdown.options[i].text
+                data["size"] =""
+                data["stock"] = table.find_element(By.CSS_SELECTOR, "tr:nth-of-type(2)").find_element(By.CSS_SELECTOR, "td:nth-of-type(1)" ).text
+            
+                fulldata.append(data)
+        except TimeoutException:
+            print("Time exceeded!")
     print(fulldata)
     return fulldata
 
@@ -99,6 +109,10 @@ def createNewProducts(data, colorList, sizeList):
     colorList = [*set(colorList)]
     sizeList = [*set(remove_empty_lists(sizeList))]
     url = f"https://{store}/admin/api/2023-07/products.json"
+    price = re.sub("[^\d\.]","",str(data["lowest_price"]))
+    print(price)
+    price = str(float(price) * 2.5)
+    print(price)
     if len(sizeList) != 0 :
         payload = {
             "product": {
@@ -113,7 +127,7 @@ def createNewProducts(data, colorList, sizeList):
                     "option1": variant.get("color"),
                     "option2": variant.get("size"),
                     "sku":  f'{data["sku"]}.{variant.get("color")}.{variant.get("size")}',
-                    "price": re.sub("[^\d\.]","",str(data["lowest_price"])),
+                    "price": price,
                     "inventory_management": "shopify"
                 },
                 "options":[{
@@ -138,7 +152,7 @@ def createNewProducts(data, colorList, sizeList):
                     "title": variant.get("color"), 
                     "option1": variant.get("color"),
                     "sku": f'{data["sku"]}.{variant.get("color")}',
-                    "price": re.sub("[^\d\.]","",str(data["lowest_price"])),
+                    "price": price,
                     "inventory_management": "shopify"
             },
             "options":[{
@@ -178,7 +192,10 @@ def addImage(id, links):
         }
         response = requests.request("POST", url, json=payload, headers=headers)
 def addStockVariant(productId, variantId, variant, product): 
-   
+    price = re.sub("[^\d\.]","",str(product["lowest_price"]))
+    print(price)
+    price = str(float(price) * 2.5)
+    print(price)
     url = f'https://{store}/admin/api/2023-07/products/{productId}.json'
     if variant.get('size') != "":
         #Has size
@@ -190,7 +207,7 @@ def addStockVariant(productId, variantId, variant, product):
                     "option1": variant.get("color"),
                     "option2": variant.get("size"),
                     "sku":  f'{product["sku"]}.{variant.get("color")}.{variant.get("size")}',
-                    "price": re.sub("[^\d\.]","",str(product["lowest_price"])),
+                    "price": price,
                     "inventory_management": "shopify"
                 }
             }
@@ -204,7 +221,7 @@ def addStockVariant(productId, variantId, variant, product):
                     "title": variant.get("color"), 
                     "option1": variant.get("color"),
                     "sku": f'{product["sku"]}.{variant.get("color")}',
-                    "price": re.sub("[^\d\.]","",str(product["lowest_price"])),
+                    "price": price,
                     "inventory_management": "shopify"
                 }
             }
@@ -239,6 +256,10 @@ def adjustInventoryLevel(inventoryId, adjust):
     response = requests.request("POST", url, json=payload, headers=headers)
 
 def addNewStockVariant(productId, variant, product): 
+    price = re.sub("[^\d\.]","",str(product["lowest_price"]))
+    print(price)
+    price = str(float(price) * 2.5)
+    print(price)
     url = f'https://{store}/admin/api/2023-07/products/{productId}/variants.json'
     if variant.get('size') != "":
         payload = {
@@ -247,7 +268,7 @@ def addNewStockVariant(productId, variant, product):
                 "title": f'{variant.get("color")} {variant.get("size")}', 
                 "option1": variant.get("color"),
                 "option2": variant.get("size"),
-                "price": re.sub("[^\d\.]","",str(product["lowest_price"])),
+                "price": price,
                 "inventory_management": "shopify"
             }}
     else:
@@ -256,7 +277,7 @@ def addNewStockVariant(productId, variant, product):
             "sku":f'{product["sku"]}.{variant.get("color")}',
             "title": variant.get("color"),
             "option1": variant.get("color"),
-            "price": re.sub("[^\d\.]","",str(product["lowest_price"])),
+            "price": price,
             "inventory_management": "shopify"
     }}
     headers = {
@@ -321,8 +342,9 @@ def existingProducts():
     print( f'Total product count for Legend Life : {str(count)} .')
     return list
 def getProductsByTitle(title):
+    print(title)
     url = f"https://{store}/admin/api/2023-07/products.json"
-    querystring = {"vendor":"Promo Brands","title":title}
+    querystring = {"vendor":"Legend Life","title":title}
     headers = {
         "Content-Type": "application/json",
         "X-Shopify-Access-Token": token,
@@ -343,7 +365,6 @@ def getProductsByTitle(title):
 
 def scrapeLegendLife():
 
-    URL="https://www.legendlife.com.au/customer/account/login/referer/aHR0cHM6Ly93d3cubGVnZW5kbGlmZS5jb20uYXUvY3VzdG9tZXIvYWNjb3VudC9pbmRleC8,/"
     driver = webdriver.Firefox()
     driver.get(URL)
     # assertIn("search", driver.title)
@@ -356,6 +377,7 @@ def scrapeLegendLife():
 
     items = getCollectionLink(driver)
     for item in items:
+   
         driver.get(item.get("link"))
         
         shortDescription =""
@@ -434,11 +456,11 @@ def scrapeLegendLife():
     return items
 
 def createNewProductLegendLife(product):
-    print(product)
+   
     colorList = [p.get('color') for p in product["variants"]]
     sizeList = [p.get('size') for p in product["variants"]]
     pr = createNewProducts(product, colorList, sizeList)
-    print(pr)
+    
     time.sleep(1)
     # Add image
     addImage(pr["product"]['id'], product["product_image"])
@@ -469,7 +491,9 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-#products = scrapeLegendLife()
+products = scrapeLegendLife()
+
+# [{'sku': '4379', 'link': 'https://www.legendlife.com.au/sports-visor.html', 'title': 'Sports Visor', 'lowest_price': '$5.90', 'tags': 'new', 'description': "<p>This sports visor has classic flowing lines. It's made from microfibre, keeping it light and ensuring you stay cool whilst on the move.</p><h4>Customise your order - Request a Quote</h4><p>Submit a quote request to receive pricing based on your logo branding and quantity you require. Bulk discounts apply.</p><h4>Colours</h4><p>Black, Navy, Red, White, White/Royal</p><h4>Marketing Info Sheet</h4><ul><li><a href='https://www.legendlife.com.au/media/EPI_MediaFolder/4379/Marketing%20Info%20Sheet/4379_Marketing%20Info%20Sheet.pdf' target='_blank' >4379_Marketing Info Sheet.pdf</a></li></ul>", 'product_image': ['https://www.legendlife.com.au/media/catalog/product/cache/1/image/438x438/9df78eab33525d08d6e5fb8d27136e95/4/3/4379_-_Image_12.jpg', 'https://www.legendlife.com.au/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/4/3/4379-BL_-_Image_13.jpg', 'https://www.legendlife.com.au/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/4/3/4379-NA_-_Image_13.jpg', 'https://www.legendlife.com.au/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/4/3/4379-RE_-_Image_13.jpg', 'https://www.legendlife.com.au/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/4/3/4379-WH_-_Image_13.jpg', 'https://www.legendlife.com.au/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/4/3/4379-WH.RO_-_Image_13.jpg'], 'variants': [{'color': 'Black', 'size': '', 'stock': '1000+'}, {'color': 'Navy', 'size': '', 'stock': '1000+'}, {'color': 'Red', 'size': '', 'stock': '36'}, {'color': 'White', 'size': '', 'stock': '1000+'}, {'color': 'White,Royal', 'size': '', 'stock': '61'}]}]
 
 # Get existing products from LegendLife
 e_Products= []
@@ -478,8 +502,6 @@ print(e_Products)
 
 setSku = []
 for e_Product in e_Products:
-    print(e_Product)
-    print(e_Product.split(".")[0])
     if e_Product.split(".")[0]is not None:
         setSku.append(e_Product.split(".")[0])
 setSku = set(setSku)
@@ -495,6 +517,7 @@ for i in range(len(products)):
         if products[i]["sku"] not in setSku:
             # Create new product
             print(">> ***[create new product]***")
+            print(f'{products[i]["sku"]}.{products[i]["title"]}')
             createNewProductLegendLife(products[i])
         else:
             # Update existing product stock level 
@@ -514,7 +537,7 @@ for i in range(len(products)):
                                 v_["stock"] = '0'
                             adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
                             if adjust != 0:
-                                print(f'** 2nd updating stock level product {products[i]["product_code"]} **')
+                                print(f'** 2nd updating stock level product {products[i]["sku"]} **')
                                 print(f"[Adustment] stock level {adjust}")
                                 print( f"[Adustment] stock level for {v['inventory_item_id']} - adjust {adjust} .")
                                 adjustInventoryLevel(v["inventory_item_id"], str(adjust))
