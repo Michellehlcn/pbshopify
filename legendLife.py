@@ -6,8 +6,10 @@ import json
 import re
 import time
 import logging
+import logging.handlers
 import base64
 import pandas as pd
+import os
 
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -18,8 +20,9 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 
 
+
 def getCollectionLink(driver):
-    page = 2
+    page = 7
     dic = []
     # while page <11:
     driver.get(f"https://www.legendlife.com.au/product_search?limit=100&p={page}")
@@ -33,7 +36,9 @@ def getCollectionLink(driver):
         title = product.find_element(By.CLASS_NAME, "product-title" ).text
         sku = product.find_element(By.CLASS_NAME, "product-code" ).find_element(By.TAG_NAME, 'a').text
         price = products.find_element(By.CSS_SELECTOR, f"li:nth-of-type({i})").find_element(By.CLASS_NAME, "price-box").find_element(By.CLASS_NAME, "regular-price").find_element(By.CLASS_NAME, "price").text
-        
+        price = re.sub("[^\d\.]","",str(price))
+        price = str(float(price) * 2.5)
+   
         pag["sku"] = sku
         pag["link"] = link
         pag["title"] = title
@@ -44,6 +49,23 @@ def getCollectionLink(driver):
         page += 1
     print(dic)
     return dic  
+
+def adjustInventoryPrice(id, price):
+
+    url = f'https://{store}/admin/api/2023-07/inventory_items/{id}.json'
+    payload = {
+        "inventory_item": {
+            "id": id,
+            "price": price
+        }
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": token,
+        "Accept": "aplication/json"
+    }
+
+    response = requests.request("PUT", url, json=payload, headers=headers)
 
 
 def getData(url, driver):
@@ -85,22 +107,6 @@ def getData(url, driver):
     print(fulldata)
     return fulldata
 
-
-class scrapeData():
-    def setUp(self):
-        self.driver = webdriver.Firefox()
-    def login(self):
-        driver = self.driver
-        driver.get(URL)
-        self.assertIn("search", driver.title)
-        
-        username = driver.find_element(By.ID, "email")
-        password = driver.find_element(By.ID, "password")
-        username.send_keys(e)
-        password.send_keys(p)
-        driver.find_element(By.ID,"send2").click()
-if __name__ == "__main__":
-    scrapeData()
 def remove_empty_lists (lst):
     return [ e for e in lst if len(e)!=0]
 
@@ -110,9 +116,7 @@ def createNewProducts(data, colorList, sizeList):
     sizeList = [*set(remove_empty_lists(sizeList))]
     url = f"https://{store}/admin/api/2023-07/products.json"
     price = re.sub("[^\d\.]","",str(data["lowest_price"]))
-    print(price)
-    price = str(float(price) * 2.5)
-    print(price)
+
     if len(sizeList) != 0 :
         payload = {
             "product": {
@@ -193,9 +197,7 @@ def addImage(id, links):
         response = requests.request("POST", url, json=payload, headers=headers)
 def addStockVariant(productId, variantId, variant, product): 
     price = re.sub("[^\d\.]","",str(product["lowest_price"]))
-    print(price)
-    price = str(float(price) * 2.5)
-    print(price)
+
     url = f'https://{store}/admin/api/2023-07/products/{productId}.json'
     if variant.get('size') != "":
         #Has size
@@ -257,9 +259,7 @@ def adjustInventoryLevel(inventoryId, adjust):
 
 def addNewStockVariant(productId, variant, product): 
     price = re.sub("[^\d\.]","",str(product["lowest_price"]))
-    print(price)
-    price = str(float(price) * 2.5)
-    print(price)
+
     url = f'https://{store}/admin/api/2023-07/products/{productId}/variants.json'
     if variant.get('size') != "":
         payload = {
@@ -288,7 +288,9 @@ def addNewStockVariant(productId, variant, product):
 
     response = requests.request("POST", url, json=payload, headers=headers)
     print(f'>>  response Add new stock variant {response.status_code}')
-   
+    # Send email notification
+    logger.info(f'{product["sku"]}.{variant.get("color")}')
+
     variant = json.loads(response.text)
     return variant
 def addInventoryLevel(inventoryId, avail):
@@ -364,6 +366,7 @@ def getProductsByTitle(title):
     return products
 
 def scrapeLegendLife():
+
 
     driver = webdriver.Firefox()
     driver.get(URL)
@@ -477,11 +480,14 @@ def createNewProductLegendLife(product):
             addInventoryLevel(vr["product"]["variants"][0]["inventory_item_id"],product["variants"][j]["stock"])
             time.sleep(1)
         if j > 0:
-            vr = addNewStockVariant(pr["product"]["id"], product["variants"][j], product)
-            time.sleep(1)
-            print(vr)
-            addInventoryLevel(vr["variant"]["inventory_item_id"],product["variants"][j]["stock"])
-            time.sleep(1)
+            try:
+                vr = addNewStockVariant(pr["product"]["id"], product["variants"][j], product)
+                time.sleep(1)
+                print(vr)
+                addInventoryLevel(vr["variant"]["inventory_item_id"],product["variants"][j]["stock"])
+                time.sleep(1)
+            except:
+                continue
   
 
 # Enable logging
@@ -491,8 +497,18 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-products = scrapeLegendLife()
+smtp_handler = logging.handlers.SMTPHandler(mailhost=('smtp.gmail.com', 587),
+                                        fromaddr=fromemail,
+                                        toaddrs=[toemail],
+                                        subject='CustomBrands Shopify Updates',
+                                        credentials=(
+                                            fromemail,
+                                            password),
+                                        secure=())
+logger.addHandler(smtp_handler)
 
+products = scrapeLegendLife()
+logger.info(products)
 # [{'sku': '4379', 'link': 'https://www.legendlife.com.au/sports-visor.html', 'title': 'Sports Visor', 'lowest_price': '$5.90', 'tags': 'new', 'description': "<p>This sports visor has classic flowing lines. It's made from microfibre, keeping it light and ensuring you stay cool whilst on the move.</p><h4>Customise your order - Request a Quote</h4><p>Submit a quote request to receive pricing based on your logo branding and quantity you require. Bulk discounts apply.</p><h4>Colours</h4><p>Black, Navy, Red, White, White/Royal</p><h4>Marketing Info Sheet</h4><ul><li><a href='https://www.legendlife.com.au/media/EPI_MediaFolder/4379/Marketing%20Info%20Sheet/4379_Marketing%20Info%20Sheet.pdf' target='_blank' >4379_Marketing Info Sheet.pdf</a></li></ul>", 'product_image': ['https://www.legendlife.com.au/media/catalog/product/cache/1/image/438x438/9df78eab33525d08d6e5fb8d27136e95/4/3/4379_-_Image_12.jpg', 'https://www.legendlife.com.au/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/4/3/4379-BL_-_Image_13.jpg', 'https://www.legendlife.com.au/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/4/3/4379-NA_-_Image_13.jpg', 'https://www.legendlife.com.au/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/4/3/4379-RE_-_Image_13.jpg', 'https://www.legendlife.com.au/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/4/3/4379-WH_-_Image_13.jpg', 'https://www.legendlife.com.au/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/4/3/4379-WH.RO_-_Image_13.jpg'], 'variants': [{'color': 'Black', 'size': '', 'stock': '1000+'}, {'color': 'Navy', 'size': '', 'stock': '1000+'}, {'color': 'Red', 'size': '', 'stock': '36'}, {'color': 'White', 'size': '', 'stock': '1000+'}, {'color': 'White,Royal', 'size': '', 'stock': '61'}]}]
 
 # Get existing products from LegendLife
