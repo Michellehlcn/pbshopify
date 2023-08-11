@@ -196,7 +196,7 @@ def addImage(id, links):
         }
         response = requests.request("POST", url, json=payload, headers=headers)
 def addStockVariant(productId, variantId, variant, product): 
-    price = re.sub("[^\d\.]","",str(product["lowest_price"]))
+    price = float(product["lowest_price"])
 
     url = f'https://{store}/admin/api/2023-07/products/{productId}.json'
     if variant.get('size') != "":
