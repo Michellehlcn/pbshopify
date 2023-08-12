@@ -37,8 +37,7 @@ def getCollectionLink(driver):
         sku = product.find_element(By.CLASS_NAME, "product-code" ).find_element(By.TAG_NAME, 'a').text
         price = products.find_element(By.CSS_SELECTOR, f"li:nth-of-type({i})").find_element(By.CLASS_NAME, "price-box").find_element(By.CLASS_NAME, "regular-price").find_element(By.CLASS_NAME, "price").text
         price = re.sub("[^\d\.]","",str(price))
-        price = str(float(price) * 2.5)
-   
+        price = str(round(float(price) * 2.5,1))
         pag["sku"] = sku
         pag["link"] = link
         pag["title"] = title
@@ -107,6 +106,22 @@ def getData(url, driver):
     print(fulldata)
     return fulldata
 
+
+class scrapeData():
+    def setUp(self):
+        self.driver = webdriver.Firefox()
+    def login(self):
+        driver = self.driver
+        driver.get(URL)
+        self.assertIn("search", driver.title)
+        
+        username = driver.find_element(By.ID, "email")
+        password = driver.find_element(By.ID, "password")
+        username.send_keys(e)
+        password.send_keys(p)
+        driver.find_element(By.ID,"send2").click()
+if __name__ == "__main__":
+    scrapeData()
 def remove_empty_lists (lst):
     return [ e for e in lst if len(e)!=0]
 
@@ -115,8 +130,8 @@ def createNewProducts(data, colorList, sizeList):
     colorList = [*set(colorList)]
     sizeList = [*set(remove_empty_lists(sizeList))]
     url = f"https://{store}/admin/api/2023-07/products.json"
-    price = re.sub("[^\d\.]","",str(data["lowest_price"]))
-
+    price = float(data["lowest_price"])
+    
     if len(sizeList) != 0 :
         payload = {
             "product": {
@@ -256,9 +271,31 @@ def adjustInventoryLevel(inventoryId, adjust):
     }
 
     response = requests.request("POST", url, json=payload, headers=headers)
+def adjustInventoryPrice(productid, variantid,  price):
+
+    url = f'https://{store}/admin/api/2023-07/products/{productid}.json'
+    querystring = {"vendor":"Legend Life"}
+    payload = {"product": {
+            "id": productid,
+            "variants":[{
+              "id": variantid,
+              "price": float(price)
+        }]
+      }
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": token
+    }
+   
+    response = requests.request("PUT", url, json=payload, headers=headers, params=querystring)
+    print(f'{productid} -{variantid} -{price}')
+    print(json.loads(response.text))
+    time.sleep(1)
+
 
 def addNewStockVariant(productId, variant, product): 
-    price = re.sub("[^\d\.]","",str(product["lowest_price"]))
+    price = float(product["lowest_price"])
 
     url = f'https://{store}/admin/api/2023-07/products/{productId}/variants.json'
     if variant.get('size') != "":
@@ -379,82 +416,84 @@ def scrapeLegendLife():
     driver.find_element(By.ID,"send2").click()
 
     items = getCollectionLink(driver)
-    for item in items:
+#     for item in items:
    
-        driver.get(item.get("link"))
+#         driver.get(item.get("link"))
         
-        shortDescription =""
-        productSpec =""
-        colorSpecs =""
-        colorChart =""
-        marketSheet =""
-        imagePack =""
-        warranty =""
+#         shortDescription =""
+#         productSpec =""
+#         colorSpecs =""
+#         colorChart =""
+#         marketSheet =""
+#         imagePack =""
+#         warranty =""
 
-        desc = driver.find_element(By.ID, "product_tabs_summary_contents" )
-        # short description
-        try: 
-            shortDescription = f"<p>{desc.find_element(By.CLASS_NAME, 'short-description').text}</p>"
-        except NoSuchElementException:
-            print("")
-        # Product specification
-        try:
-            productSpecText = desc.find_element(By.XPATH,'//h4[contains(text(),"Product Specifications")]').find_element(By.XPATH, 'following-sibling::*[1]').get_attribute('innerHTML')
-            productSpec =f"<h4>Product Specifications</h4>{productSpecText}"
-        except NoSuchElementException:
-            print("")
+#         desc = driver.find_element(By.ID, "product_tabs_summary_contents" )
+#         # short description
+#         try: 
+#             shortDescription = f"<p>{desc.find_element(By.CLASS_NAME, 'short-description').text}</p>"
+#         except NoSuchElementException:
+#             print("")
+#         # Product specification
+#         try:
+#             productSpecText = desc.find_element(By.XPATH,'//h4[contains(text(),"Product Specifications")]').find_element(By.XPATH, 'following-sibling::*[1]').get_attribute('innerHTML')
+#             productSpec =f"<h4>Product Specifications</h4>{productSpecText}"
+#         except NoSuchElementException:
+#             print("")
 
-        # Color
-        try:
-            colorText = desc.find_element(By.XPATH,'//h4[contains(text(),"Colours")]').find_element(By.XPATH, 'following-sibling::*[1]').text
-            colorSpecs = f"<h4>Colours</h4><p>{colorText}</p>"
-        except NoSuchElementException:
-            print("")
-        # PMS Color chart
-        try:
-            desc.find_element(By.XPATH,"//h4[contains(text(),'PMS Colour Chart')]")
-            colorChartText= desc.find_element(By.XPATH,"//h4[contains(text(),'PMS Colour Chart')]").find_element(By.XPATH, "following-sibling::*[1]").text
-            link_ = desc.find_element(By.XPATH,"//h4[contains(text(),'PMS Colour Chart')]").find_element(By.XPATH, "following-sibling::*[1]").find_element(By.TAG_NAME,"a").get_attribute('href')
-            colorChart = f"<h4>PMS Colour Chart</h4><ul><li><a href='{link_}' target='_blank' >{colorChartText}</a></li></ul>"
-        except NoSuchElementException:
-            print("")
+#         # Color
+#         try:
+#             colorText = desc.find_element(By.XPATH,'//h4[contains(text(),"Colours")]').find_element(By.XPATH, 'following-sibling::*[1]').text
+#             colorSpecs = f"<h4>Colours</h4><p>{colorText}</p>"
+#         except NoSuchElementException:
+#             print("")
+#         # PMS Color chart
+#         try:
+#             desc.find_element(By.XPATH,"//h4[contains(text(),'PMS Colour Chart')]")
+#             colorChartText= desc.find_element(By.XPATH,"//h4[contains(text(),'PMS Colour Chart')]").find_element(By.XPATH, "following-sibling::*[1]").text
+#             link_ = desc.find_element(By.XPATH,"//h4[contains(text(),'PMS Colour Chart')]").find_element(By.XPATH, "following-sibling::*[1]").find_element(By.TAG_NAME,"a").get_attribute('href')
+#             colorChart = f"<h4>PMS Colour Chart</h4><ul><li><a href='{link_}' target='_blank' >{colorChartText}</a></li></ul>"
+#         except NoSuchElementException:
+#             print("")
 
-        # Marketing info sheet
-        try:
-            marketSheetText= desc.find_element(By.XPATH,"//h4[contains(text(),'Marketing Info Sheet')]").find_element(By.XPATH, "following-sibling::*[1]").text
-            linkSheet = desc.find_element(By.XPATH,"//h4[contains(text(),'Marketing Info Sheet')]").find_element(By.XPATH, "following-sibling::*[1]").find_element(By.TAG_NAME,"a").get_attribute('href')
-            marketSheet = f"<h4>Marketing Info Sheet</h4><ul><li><a href='{linkSheet }' target='_blank' >{marketSheetText}</a></li></ul>"
-        except NoSuchElementException:
-            print("")
+#         # Marketing info sheet
+#         try:
+#             marketSheetText= desc.find_element(By.XPATH,"//h4[contains(text(),'Marketing Info Sheet')]").find_element(By.XPATH, "following-sibling::*[1]").text
+#             linkSheet = desc.find_element(By.XPATH,"//h4[contains(text(),'Marketing Info Sheet')]").find_element(By.XPATH, "following-sibling::*[1]").find_element(By.TAG_NAME,"a").get_attribute('href')
+#             marketSheet = f"<h4>Marketing Info Sheet</h4><ul><li><a href='{linkSheet }' target='_blank' >{marketSheetText}</a></li></ul>"
+#         except NoSuchElementException:
+#             print("")
         
-        # Image Pack
-        # try:
-        #     imagePackText= desc.find_element(By.XPATH,"//h4[contains(text(),'Image Pack')]").find_element(By.XPATH, "following-sibling::*[1]").text
-        #     linkImagePack = desc.find_element(By.XPATH,"//h4[contains(text(),'Image Pack')]").find_element(By.XPATH, "following-sibling::*[1]").find_element(By.TAG_NAME,"a").get_attribute('href')
-        #     if imagePackText !="":
-        #         imagePack = f"<h4>Image Pack</h4><ul><li><a href='{linkImagePack}' target='_blank' >{imagePackText}</a></li></ul>"
-        # except NoSuchElementException:
-        #     print("")
+#         # Image Pack
+#         # try:
+#         #     imagePackText= desc.find_element(By.XPATH,"//h4[contains(text(),'Image Pack')]").find_element(By.XPATH, "following-sibling::*[1]").text
+#         #     linkImagePack = desc.find_element(By.XPATH,"//h4[contains(text(),'Image Pack')]").find_element(By.XPATH, "following-sibling::*[1]").find_element(By.TAG_NAME,"a").get_attribute('href')
+#         #     if imagePackText !="":
+#         #         imagePack = f"<h4>Image Pack</h4><ul><li><a href='{linkImagePack}' target='_blank' >{imagePackText}</a></li></ul>"
+#         # except NoSuchElementException:
+#         #     print("")
 
-        # Warranty
-        try:
-            w =""
-            for e in desc.find_element(By.XPATH,"//h4[contains(text(),'Warranty & Technologies')]").find_element(By.XPATH, "following-sibling::*[1]").find_elements(By.TAG_NAME,"li"):
-                warrantyText = e.text
-                linkWarranty = e.find_element(By.TAG_NAME,"a").get_attribute('href')
-                w += f"<li><a href='{linkWarranty}' target='_blank' >{warrantyText}</a></li>"
-            warranty = f"<h4>Warranty & Technologies</h4><ul>{w}</ul>"
-        except NoSuchElementException:
-            print("")
-        customize ="<h4>Customise your order - Request a Quote</h4><p>Submit a quote request to receive pricing based on your logo branding and quantity you require. Bulk discounts apply.</p>"
-        item["description"] = shortDescription +  customize + productSpec + colorSpecs + colorChart +marketSheet + warranty
+#         # Warranty
+#         try:
+#             w =""
+#             for e in desc.find_element(By.XPATH,"//h4[contains(text(),'Warranty & Technologies')]").find_element(By.XPATH, "following-sibling::*[1]").find_elements(By.TAG_NAME,"li"):
+#                 warrantyText = e.text
+#                 linkWarranty = e.find_element(By.TAG_NAME,"a").get_attribute('href')
+#                 w += f"<li><a href='{linkWarranty}' target='_blank' >{warrantyText}</a></li>"
+#             warranty = f"<h4>Warranty & Technologies</h4><ul>{w}</ul>"
+#         except NoSuchElementException:
+#             print("")
+#         customize ="<h4>Customise your order - Request a Quote</h4><p>Submit a quote request to receive pricing based on your logo branding and quantity you require. Bulk discounts apply.</p>"
+#         item["description"] = shortDescription +  customize + productSpec + colorSpecs + colorChart +marketSheet + warranty
         
-        images = driver.find_element(By.CLASS_NAME, "swatchesContainer" ).find_elements(By.TAG_NAME,"a") 
-        img_cover = driver.find_element(By.CLASS_NAME, "product-image-zoom" ).find_element(By.TAG_NAME,"a").find_element(By.TAG_NAME,"img").get_attribute('src')
-        item["product_image"] = [img_cover] + [image.get_attribute('href') for image in images]
+#         images = driver.find_element(By.CLASS_NAME, "swatchesContainer" ).find_elements(By.TAG_NAME,"a") 
+#         img_cover = driver.find_element(By.CLASS_NAME, "product-image-zoom" ).find_element(By.TAG_NAME,"a").find_element(By.TAG_NAME,"img").get_attribute('src')
+#         item["product_image"] = [img_cover] + [image.get_attribute('href') for image in images]
         
-        variant = getData(item.get("link"), driver)
-        item["variants"] = variant
+#         variant = getData(item.get("link"), driver)
+#         item["variants"] = variant
+        
+        
     print(items)
     return items
 
@@ -488,7 +527,6 @@ def createNewProductLegendLife(product):
                 time.sleep(1)
             except:
                 continue
-  
 
 # Enable logging
 logging.basicConfig(
@@ -543,24 +581,55 @@ for i in range(len(products)):
             #By pass error products
             try:
                 a =p["products"][0]
+                print(a)
                 
                 for v in p["products"][0]["variants"]: #from shopify
+                    # Correct price
+                    # adjustInventoryPrice(a["id"],v["id"], products[i]["lowest_price"])
 
-                    # variant already exits, add adjustment
-                    for v_ in products[i]["variants"]: #from legend scraper
-                        if (v["sku"] == f'{products[i]["sku"]}.{v_["color"]}.{v_["size"]}') or (v["sku"] == f'{products[i]["sku"]}.{v_["color"]}'):
-                            if v_["stock"] is None:
-                                v_["stock"] = '0'
-                            adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
-                            if adjust != 0:
-                                print(f'** 2nd updating stock level product {products[i]["sku"]} **')
-                                print(f"[Adustment] stock level {adjust}")
-                                print( f"[Adustment] stock level for {v['inventory_item_id']} - adjust {adjust} .")
-                                adjustInventoryLevel(v["inventory_item_id"], str(adjust))
-                                time.sleep(3)
-     
+                    # variant already exits, add adjustment stock level
+                    if len(p["products"][0]["variants"]) == len(products[i]["variants"]):
+                        for v_ in products[i]["variants"]: #from legend scraper
+                            if (v["sku"] == f'{products[i]["sku"]}.{v_["color"]}.{v_["size"]}') or (v["sku"] == f'{products[i]["sku"]}.{v_["color"]}'):
+                                if v_["stock"] is None:
+                                    v_["stock"] = '0'
+                                adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
+                                if adjust != 0:
+                                    print(f'** 2nd updating stock level product {products[i]["sku"]} **')
+                                    print(f"[Adustment] stock level {adjust}")
+                                    print( f"[Adustment] stock level for {v['inventory_item_id']} - adjust {adjust} .")
+                                    adjustInventoryLevel(v["inventory_item_id"], str(adjust))
+                                    time.sleep(3)
+                     # variant not exit, create new variant 'ST9020.Black Opal.S'
+                    if len(p["products"][0]["variants"]) < len(products[i]["variants"]):
+                        print("[Detect] new variant-- Adding...")
+                        vrExiting = [vrl["sku"] for vrl in p["products"][0]["variants"]] # from shopify, sku = sku.color.size
+                        vrInNewData = []
+                        for v_ in products[i]["variants"]: # from legend scraper
+                            if v_["size"] != "":
+                                print(f'{products[i]["sku"]}.{v_["color"]}.{v_["size"]}')
+                                if f'{products[i]["sku"]}.{v_["color"]}.{v_["size"]}' not in vrExiting:
+                                    try:
+                                        vr = addNewStockVariant(p["products"][0]["id"], v_, products[i])
+                                        time.sleep(1)
+                                        print(vr)
+                                        addInventoryLevel(vr["variant"]["inventory_item_id"],v_["stock"])
+                                        time.sleep(1)
+                                    except:
+                                        continue
+                            if v_["size"] == "":
+                                print(f'{products[i]["sku"]}.{v_["color"]}')
+                                if f'{products[i]["sku"]}.{v_["color"]}' not in vrExiting:
+                                    try:
+                                        vr = addNewStockVariant(p["products"][0]["id"],v_, products[i])
+                                        time.sleep(1)
+                                        print(vr)
+                                        addInventoryLevel(vr["variant"]["inventory_item_id"],v_["stock"])
+                                        time.sleep(1)
+                                    except:
+                                        continue
+                      
             except:
                 print(p)
                 print(products[i]["name"])
                 pass
-
