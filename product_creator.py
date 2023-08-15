@@ -343,13 +343,15 @@ def process(products, e_Products):
                         for v_ in products[i]["variants"]:
 
                             if v["sku"] == v_["itemNumber"]:
+                                l=""
                                 if v_["stock"] is None:
                                     v_["stock"] = '0'
+                                    l = "[OUT OF STOCK]"
                                 adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
                                 if adjust != 0:
                                     print(f'** 1rd updating stock level product {products[i]["product_code"]} **')
                                     print(f"[Adustment] stock level {adjust}")
-                                    message+= f'[Adustment] stock level sku {str(vr["variant"]["inventory_item_id"])} - adjust {adjust}.'
+                                    message+= f'[Adustment] stock level sku {str(vr["variant"]["inventory_item_id"])} - adjust {adjust} {l}.'
                                     adjustInventoryLevel(v["inventory_item_id"], str(adjust))
                                     time.sleep(1)
                 except:
