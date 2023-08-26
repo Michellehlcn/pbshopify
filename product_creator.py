@@ -5,11 +5,26 @@ import pprint
 import base64
 import re
 from datetime import datetime as dt
+from datetime import date
 import schedule
 import time
 import logging
 import logging.handlers
 import os
+
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
+
+
+
+hostName = "localhost"
+serverPort = 8080
+
+class MyServer(BaseHTTPRequestHandler):
+  def do_GET(self):
+    self.send_response(200)
+    self.send_header("content-Type", "text/html")
+    self.end_headers()
 
 client_id = os.environ['CLIENT_ID']
 refresh_token = os.environ['REFRESH_TOKEN']
@@ -31,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 smtp_handler = logging.handlers.SMTPHandler(mailhost=('smtp.gmail.com', 587),
                                         fromaddr=fromemail,
-                                        toaddrs=[toemail],
+                                        toaddrs=[toemail,fromemail],
                                         subject='CustomBrands Shopify Updates',
                                         credentials=(
                                             fromemail,
@@ -221,7 +236,7 @@ def existingProducts():
             isNotLimit = False
         else:
             print(f"Total existing products for this batch: %s" % len(products["products"]))
-            count=+  len(products["products"])
+            count= count+ int(len(products["products"]))
             lastId = products["products"][-1]["id"]
             for p in products["products"]:
                 for v in p["variants"]:
@@ -260,7 +275,7 @@ def process(products, e_Products):
         if products[i]["product_code"] not in e_Products:
             if checkVariantExists(products[i], e_Products) is False:
                 print(f'Adding PromoBrands {products[i]["product_id"]} -  {products[i]["product_code"]}')
-                message += f'Adding PromoBrands sku {products[i]["product_code"]} {products[i]["name"]}'
+                #message += f'Adding PromoBrands sku {products[i]["product_code"]} {products[i]["name"]}'
                 # Create a new product
                 pr = createNewProducts(products[i])
                 time.sleep(1)
@@ -308,7 +323,7 @@ def process(products, e_Products):
                                 if adjust != 0:
                                     print(f'** 2nd updating stock level product {products[i]["product_code"]} **')
                                     print(f"[Adustment] stock level {adjust}")
-                                    message += f"[Adustment] stock level for {v['inventory_item_id']} - adjust {adjust} ."
+                                    message += f"[Adustment] stock level for {v['sku']} - adjust {adjust} ."
                                     adjustInventoryLevel(v["inventory_item_id"], str(adjust))
                                     time.sleep(3)
                         # variant not exit, create new variant
@@ -322,7 +337,7 @@ def process(products, e_Products):
                                 vr = addNewStockVariant(p["products"][0]["id"], subVr, products[i])
                                 time.sleep(1)
                                 print(vr)
-                                message+= f'New stock sku {str(vr["variant"]["inventory_item_id"])} .'
+                                message+= f'New stock sku {str(vr["variant"]["sku"])} - {subVr["stock"]} .'
                                 addInventoryLevel(vr["variant"]["inventory_item_id"],subVr["stock"])
                                 time.sleep(1)
                 except:
@@ -343,15 +358,16 @@ def process(products, e_Products):
                         for v_ in products[i]["variants"]:
 
                             if v["sku"] == v_["itemNumber"]:
-                                l=""
+                                l = ""
                                 if v_["stock"] is None:
                                     v_["stock"] = '0'
-                                    l = "[OUT OF STOCK]"
+                                if v_["stock"] == '0':
+                                    l = "[OUT OF STOCK] this item is out of stock"
                                 adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
                                 if adjust != 0:
                                     print(f'** 1rd updating stock level product {products[i]["product_code"]} **')
                                     print(f"[Adustment] stock level {adjust}")
-                                    message+= f'[Adustment] stock level sku {str(vr["variant"]["inventory_item_id"])} - adjust {adjust} {l}.'
+                                    message+= f'[Adustment] stock level sku {str(vr["variant"]["sku"])} - adjust {adjust} {l}.'
                                     adjustInventoryLevel(v["inventory_item_id"], str(adjust))
                                     time.sleep(1)
                 except:
@@ -362,6 +378,7 @@ def process(products, e_Products):
 
 def init():
     global message
+    message += f"Hi Alex, Today's date is {date.today()}"
     start = dt.now()
     e_Products= []
     e_Products = existingProducts() # list of sku items
@@ -370,43 +387,72 @@ def init():
     products =[]
     token_ = promo_brands.gettoken()
     # Run loop for pagination
-    last_product = 19031 #18240 #18344 #18447 #18554 18655 18758 18859 18965 19067 19031 22650 22625
+    last_product = 1 #18240 #18344 #18447 #18554 18655 18758 18859 18965 19067 19031 22650 22625
 
-    products = promo_brands.getPromoBrandProducts(token_, last_product)
+#     products = promo_brands.getPromoBrandProducts(token_, last_product)
    
-    last_product = products[-1]['product_id']
-    print(f'******** Last Product ID {last_product} **********')
-    process(products, e_Products)
+#     last_product = products[-1]['product_id']
+#     print(f'******** Last Product ID {last_product} **********')
+#     process(products, e_Products)
     
-    # IsNotPromoBrandLimit = True
-    # while IsNotPromoBrandLimit:
-    #     products = promo_brands.getPromoBrandProducts(token_, last_product)
+    IsNotPromoBrandLimit = True
+    while IsNotPromoBrandLimit:
+        products = promo_brands.getPromoBrandProducts(token_, last_product)
 
-    #     if len(products) == 0:
-    #         IsNotPromoBrandLimit = False
-    #     else:
-    #         last_product = products[-1]['product_id']
-    #         logging.info(f'******** Last Product ID {last_product} **********')
-    #         process(products, e_Products)
+        if len(products) == 0:
+            IsNotPromoBrandLimit = False
+        else:
+            last_product = products[-1]['product_id']
+            print(f'******** Last Product ID {last_product} **********')
+            process(products, e_Products)
 
     end = dt.now()
     elapsed = end - start
     print("Total running times: %02d:%02d:%02d:%02d" % (elapsed.days, elapsed.seconds // 3600, elapsed.seconds // 60 % 60, elapsed.seconds % 60))
     message +="Total running times: %02d:%02d:%02d:%02d" % (elapsed.days, elapsed.seconds // 3600, elapsed.seconds // 60 % 60, elapsed.seconds % 60) 
+    logger.info(message)
 
-
-        
+def run():
+    webServer = HTTPServer((hostName, serverPort), MyServer)
+    print("Server started http://%s:%s" % (hostName, serverPort))
+    try: 
+      webServer.serve_forever()
+    except KeyboardInterrupt:
+      pass
+    webServer.server_close()
+    print("Server stopped.")
+    
+polTime = 1
+def scheduleInit():
+    while True:
+      init()
+      # running once a day
+      time.sleep(24* (60*60))
+    
+   
 if __name__ == "__main__":
-    try:       
+         
+    try:
         print("STARTING")
         # Every day at 6am or 06:00 time init() is called.
-        init()
-        logger.info(message)
-        # schedule.every().day.at("06:00").do(init)
-        # while True:
-        #     schedule.run_pending()
-        #     time.sleep(1)
+        
+        d = threading.Thread(target=scheduleInit, name="Deamon")
+        d.setDaemon(True)
+        d.start()
+        
+        # runs the HTTP server
+        run()
+        
+    #         schedule.every().day.at("06:00").do(init)
+        
+    #         while True:
+    #             schedule.run_pending()
+    #             time.sleep(1)
     except:
         print("STOPPING")
+     
+      
+      
  
+    
     
