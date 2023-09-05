@@ -198,16 +198,18 @@ def getProductsByTitle(title):
         "Accept": "aplication/json"
     }
     response =''
+    #time.sleep(1)
     response = requests.request("GET", url, headers=headers, params=querystring)
     print(response.status_code)
     if response.status_code !=200 & response.status_code !=201: 
         print('exceeded limit call per second for shopify')
         print(response.text)
-        time.sleep(5)
+        # time.sleep(5)
         response = requests.request("GET", url, headers=headers, params=querystring)
         time.sleep(2)
 
     products = json.loads(response.text)
+    time.sleep(1)
     return products
 
 def existingProducts():
@@ -275,7 +277,7 @@ def process(products, e_Products):
         if products[i]["product_code"] not in e_Products:
             if checkVariantExists(products[i], e_Products) is False:
                 print(f'Adding PromoBrands {products[i]["product_id"]} -  {products[i]["product_code"]}')
-                #message += f'Adding PromoBrands sku {products[i]["product_code"]} {products[i]["name"]}'
+                message += f'Adding PromoBrands sku {products[i]["product_code"]} {products[i]["name"]}'
                 # Create a new product
                 pr = createNewProducts(products[i])
                 time.sleep(1)
@@ -316,16 +318,31 @@ def process(products, e_Products):
 
                         # variant already exits, add adjustment
                         for v_ in products[i]["variants"]:
+
                             if v["sku"] == v_["itemNumber"]:
-                                if v_["stock"] is None:
-                                    v_["stock"] = '0'
-                                adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
-                                if adjust != 0:
-                                    print(f'** 2nd updating stock level product {products[i]["product_code"]} **')
-                                    print(f"[Adustment] stock level {adjust}")
-                                    message += f"[Adustment] stock level for {v['sku']} - adjust {adjust} ."
-                                    adjustInventoryLevel(v["inventory_item_id"], str(adjust))
-                                    time.sleep(3)
+                              if v["sku"] == v_["itemNumber"]:
+                                  l= ""
+                                  print(f'** Detect 2nd updating {v_["stock"]} ... {v["inventory_quantity"]} **')
+                                  if v_["stock"] is None:
+                                      v_["stock"] = '0'
+                                  if v_["stock"] == '0':
+                                      l = "[OUT OF STOCK] this item is out of stock"
+                                      print("out of stock")
+                                      print(l)
+                                      #message += f"[Adustment] stock level for {v['sku']} {l}"
+                                  adjust=""
+                                  try: 
+                                      adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
+                                  except:
+                                      adjust = 0  
+                                      print(f"[Adustment] stock level for {v['sku']} - adjust {adjust} {l}.")
+                                      #message += f"[Adustment] stock level for {v['sku']} - adjust {adjust}."
+                                  if adjust != 0 and adjust != "":
+                                      print(f'** 2nd updating stock level product {products[i]["product_code"]} ** {l}')
+                                      print(f"[Adustment] stock level {adjust}")
+                                      message += f" [Adustment] stock level for {v['sku']} - adjust {adjust}."
+                                      adjustInventoryLevel(v["inventory_item_id"], str(adjust))
+                                      time.sleep(1)
                         # variant not exit, create new variant
                         if len(p["products"][0]["variants"]) < len(products[i]["variants"]):
                             print("[Detect] new variant-- Adding...")
@@ -358,16 +375,27 @@ def process(products, e_Products):
                         for v_ in products[i]["variants"]:
 
                             if v["sku"] == v_["itemNumber"]:
-                                l = ""
+                                l = ""     
+                                print(f'** Detect 1st updating {v_["stock"]} ... {v["inventory_quantity"]} **')
                                 if v_["stock"] is None:
                                     v_["stock"] = '0'
                                 if v_["stock"] == '0':
                                     l = "[OUT OF STOCK] this item is out of stock"
-                                adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
-                                if adjust != 0:
-                                    print(f'** 1rd updating stock level product {products[i]["product_code"]} **')
+                                    print("out of stock")
+                                    time.sleep(1)
+                                    #message += f"[Adustment] stock level for {v['sku']} {l}"
+                                adjust =""
+                                try: 
+                                    adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
+                                except:
+                                    adjust = 0  
+                                    print(f"[Adustment] stock level for {v['sku']} - adjust {adjust} {l}.")
+                                    #message += f"[Adustment] stock level for {v['sku']} - adjust {adjust} {l}."
+                                #adjust = int(re.sub("[+,]","",v_["stock"])) - v["inventory_quantity"]
+                                if adjust != 0 and adjust != "":
+                                    print(f'** 1st updating stock level product {products[i]["product_code"]} **')
                                     print(f"[Adustment] stock level {adjust}")
-                                    message+= f'[Adustment] stock level sku {str(vr["variant"]["sku"])} - adjust {adjust} {l}.'
+                                    message+= f' [Adustment] stock level sku {products[i]["product_code"]} - adjust {adjust} .'
                                     adjustInventoryLevel(v["inventory_item_id"], str(adjust))
                                     time.sleep(1)
                 except:
@@ -378,6 +406,7 @@ def process(products, e_Products):
 
 def init():
     global message
+    message = ""
     message += f"Hi Alex, Today's date is {date.today()}"
     start = dt.now()
     e_Products= []
@@ -425,31 +454,34 @@ def run():
 polTime = 1
 def scheduleInit():
     while True:
-      init()
+      try:
+        init()
+      except:
+        print("stopping")
       # running once a day
       time.sleep(24* (60*60))
     
    
 if __name__ == "__main__":
          
-    try:
-        print("STARTING")
+      try:
+          print("STARTING")
         # Every day at 6am or 06:00 time init() is called.
         
-        d = threading.Thread(target=scheduleInit, name="Deamon")
-        d.setDaemon(True)
-        d.start()
+#         d = threading.Thread(target=scheduleInit, name="Deamon")
+#         d.setDaemon(True)
+#         d.start()
         
-        # runs the HTTP server
-        run()
+#         # runs the HTTP server
+#         run()
+          init()
+          schedule.every().day.at("06:00").do(init)
         
-    #         schedule.every().day.at("06:00").do(init)
-        
-    #         while True:
-    #             schedule.run_pending()
-    #             time.sleep(1)
-    except:
-        print("STOPPING")
+          while True:
+              schedule.run_pending()
+              time.sleep(1)
+      except:
+          print("STOPPING")
      
       
       
